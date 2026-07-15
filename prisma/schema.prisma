@@ -1,0 +1,340 @@
+// AI Sales Operating System — data model
+// Build order follows Blueprint Milestone 1.2:
+// Role → User → Company → Lead → Call → Response → Score → Recommendation
+// → PartnerReferral → Package → Task → AuditLog → LearningEvent
+// Config-first tables (Blueprint §12) live at the bottom.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Auth & RBAC (Blueprint §4 Authentication & RBAC)
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  MANAGER
+  CSR
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  role         Role     @default(CSR)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignedLeads   Lead[]           @relation("CSRAssignment")
+  calls           Call[]
+  auditLogs       AuditLog[]
+  overrides       Recommendation[] @relation("ManagerOverride")
+  learningReviews LearningEvent[]  @relation("LearningReviewer")
+}
+
+// ---------------------------------------------------------------------------
+// Core CRM entities
+// ---------------------------------------------------------------------------
+
+enum LeadStatus {
+  NEW
+  ASSIGNED
+  IN_QUALIFICATION
+  QUALIFIED
+  QUALIFIED_WITH_CONDITIONS
+  NEEDS_NURTURING
+  PARTNER_REFERRAL
+  DISQUALIFIED_WITH_ROADMAP
+  WON
+  LOST
+}
+
+enum QualificationOutcome {
+  QUALIFIED
+  QUALIFIED_WITH_CONDITIONS
+  NEEDS_NURTURING
+  PARTNER_REFERRAL
+  DISQUALIFIED_WITH_ROADMAP
+}
+
+model Company {
+  id              String   @id @default(cuid())
+  name            String
+  industry        String?
+  products        String?
+  nafdacStatus    String? // NONE | PENDING | REGISTERED
+  monthlyRevenue  Int?
+  marketingBudget Int?
+  salesChannels   String?
+  website         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  leads Lead[]
+}
+
+model Lead {
+  id              String     @id @default(cuid())
+  status          LeadStatus @default(NEW)
+  source          String?
+  contactName     String?
+  contactPhone    String?
+  contactEmail    String?
+  isDecisionMaker Boolean    @default(false)
+  estimatedValue  Int?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  company   Company? @relation(fields: [companyId], references: [id])
+  companyId String?
+
+  assignedTo   User?   @relation("CSRAssignment", fields: [assignedToId], references: [id])
+  assignedToId String?
+
+  calls            Call[]
+  scores           Score[]
+  recommendations  Recommendation[]
+  partnerReferrals PartnerReferral[]
+  tasks            Task[]
+  auditLogs        AuditLog[]
+  learningEvents   LearningEvent[]
+}
+
+// A qualification interview session
+model Call {
+  id        String    @id @default(cuid())
+  lead      Lead      @relation(fields: [leadId], references: [id])
+  leadId    String
+  csr       User      @relation(fields: [csrId], references: [id])
+  csrId     String
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  notes     String?
+
+  responses Response[]
+  scores    Score[]
+}
+
+// One answer captured during the dynamic qualification interview
+model Response {
+  id           String   @id @default(cuid())
+  call         Call     @relation(fields: [callId], references: [id])
+  callId       String
+  questionKey  String // maps to a QualificationQuestion.key
+  questionText String
+  answer       String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([callId, questionKey])
+}
+
+// AI-produced scoring snapshot (Blueprint §8, §9)
+model Score {
+  id              String   @id @default(cuid())
+  lead            Lead     @relation(fields: [leadId], references: [id])
+  leadId          String
+  call            Call?    @relation(fields: [callId], references: [id])
+  callId          String?
+  leadScore       Int // 0-100
+  confidenceScore Int // 0-100
+  createdAt       DateTime @default(now())
+}
+
+// AI recommendation with full explainability payload (Blueprint §8, §10)
+model Recommendation {
+  id                 String               @id @default(cuid())
+  lead               Lead                 @relation(fields: [leadId], references: [id])
+  leadId             String
+  outcome            QualificationOutcome
+  recommendedPackage Package?             @relation(fields: [packageId], references: [id])
+  packageId          String?
+  estimatedValue     Int?
+
+  // Explainable AI (§10) + AI outputs (§8) stored as structured JSON
+  reasoning       String
+  signals         Json // signals used
+  positiveFactors Json
+  negativeFactors Json
+  ruleReferences  Json // business-rule references
+  risks           Json
+  opportunities   Json
+  objections      Json
+  buyingSignals   Json
+  followUpPlan    Json
+  confidenceLevel Int
+
+  // Audit of exactly what produced this (reproducibility + learning)
+  promptTemplateVersion Int?
+  rawModelInput         Json?
+  rawModelOutput        Json?
+  modelName             String?
+
+  // Human-in-the-loop override (Blueprint §14 — reason mandatory)
+  overriddenBy   User?     @relation("ManagerOverride", fields: [overriddenById], references: [id])
+  overriddenById String?
+  overrideReason String?
+  overriddenAt   DateTime?
+
+  createdAt DateTime @default(now())
+}
+
+// Partner/service referral (Blueprint §7)
+model PartnerReferral {
+  id               String         @id @default(cuid())
+  lead             Lead           @relation(fields: [leadId], references: [id])
+  leadId           String
+  partnerService   PartnerService @relation(fields: [partnerServiceId], references: [id])
+  partnerServiceId String
+  reason           String // gap that triggered this (NAFDAC, logistics, branding, website, creatives)
+  createdAt        DateTime       @default(now())
+}
+
+// Follow-up tasks (Blueprint §8 follow-up, §12 cadence)
+enum TaskStatus {
+  OPEN
+  DONE
+  CANCELLED
+}
+
+model Task {
+  id        String     @id @default(cuid())
+  lead      Lead       @relation(fields: [leadId], references: [id])
+  leadId    String
+  title     String
+  dueAt     DateTime?
+  status    TaskStatus @default(OPEN)
+  createdAt DateTime   @default(now())
+}
+
+// Event audit log (Blueprint §13)
+enum AuditAction {
+  CSR_ACTION
+  AI_DECISION
+  MANAGER_OVERRIDE
+  LEAD_STATUS_CHANGE
+  SCORE_CHANGE
+  API_CALL
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  action    AuditAction
+  actor     User?       @relation(fields: [actorId], references: [id])
+  actorId   String?
+  lead      Lead?       @relation(fields: [leadId], references: [id])
+  leadId    String?
+  summary   String
+  metadata  Json?
+  createdAt DateTime    @default(now())
+}
+
+// Continuous learning (Blueprint §11) — deferred to Phase 3, modeled now
+enum LearningStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+model LearningEvent {
+  id               String                @id @default(cuid())
+  lead             Lead?                 @relation(fields: [leadId], references: [id])
+  leadId           String?
+  predictedOutcome QualificationOutcome?
+  actualOutcome    LeadStatus? // WON / LOST
+  predictedScore   Int?
+  proposedChanges  Json // recalibration proposals (weights, thresholds, packages)
+  status           LearningStatus        @default(PENDING_REVIEW)
+  reviewer         User?                 @relation("LearningReviewer", fields: [reviewerId], references: [id])
+  reviewerId       String?
+  reviewedAt       DateTime?
+  createdAt        DateTime              @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Config-first tables (Blueprint §12) — admin-editable, no code changes
+// ---------------------------------------------------------------------------
+
+model Package {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  description String?
+  priceMin    Int?
+  priceMax    Int?
+  minBudget   Int? // suggested when lead budget >= this
+  features    Json?
+  active      Boolean @default(true)
+
+  recommendations Recommendation[]
+}
+
+enum PartnerType {
+  NAFDAC
+  LOGISTICS
+  BRANDING
+  WEBSITE
+  CREATIVE
+}
+
+model PartnerService {
+  id          String      @id @default(cuid())
+  name        String
+  type        PartnerType
+  description String?
+  active      Boolean     @default(true)
+
+  referrals PartnerReferral[]
+}
+
+// Configurable scoring weights (Blueprint §12)
+model ScoringWeight {
+  id     String  @id @default(cuid())
+  key    String  @unique // "budget", "nafdac", "decisionMaker", ...
+  weight Float
+  active Boolean @default(true)
+}
+
+// Configurable qualification thresholds
+model QualificationThreshold {
+  id    String @id @default(cuid())
+  key   String @unique // "qualifiedMinScore", ...
+  value Float
+}
+
+// Dynamic qualification questions + branching (Blueprint §5)
+model QualificationQuestion {
+  id          String  @id @default(cuid())
+  key         String  @unique
+  text        String
+  category    String // businessProfile, revenue, budget, nafdac, logistics, ...
+  order       Int
+  branchRules Json? // conditions -> next question keys
+  active      Boolean @default(true)
+}
+
+// Versioned prompt library (Blueprint §16, §12)
+model PromptTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  version   Int      @default(1)
+  body      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([name, version])
+}
+
+// Follow-up cadence config (Blueprint §12)
+model FollowUpCadence {
+  id         String               @id @default(cuid())
+  outcome    QualificationOutcome @unique
+  offsetDays Int // days after qualification to schedule first follow-up
+  active     Boolean              @default(true)
+}

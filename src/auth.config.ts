@@ -7,6 +7,9 @@ import type { Role } from "@/generated/prisma/enums";
  * added in `src/auth.ts`, which runs in the Node runtime.
  */
 export const authConfig = {
+  // Trust the deployment host (Vercel/proxied) so callback URLs resolve without
+  // needing AUTH_URL. AUTH_SECRET must still be set in the environment.
+  trustHost: true,
   pages: {
     signIn: "/login",
   },

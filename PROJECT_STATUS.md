@@ -112,9 +112,10 @@ _Blueprint: §3 (workflow steps 1–2), §4 Lead Management, §6 lead statuses._
 - ✅ **2.6 Security hardening (§15)** (verified in browser) — security response headers (`next.config.ts`, confirmed live), in-memory rate limiter (`src/lib/rate-limit.ts`) on login/qualify/call-assist (5 allowed→6th blocked, independent per key), secrets hygiene checked (`.env` gitignored + untracked, no secrets in tracked files), `SECURITY.md` documenting the full §15 posture. RBAC + audit already in place. _Follow-ups noted: Redis-backed limits for multi-instance, CSP with nonces, key rotation._
 
 ## Phase 3 — Learning engine & multi-agency
-- ⬜ Learning engine (§11): predicted vs actual, recalibration proposals, **manager approval** required
-- ⬜ `LearningEvent` review UI + versioned config history · ⬜ extract heavy AI/learning to a service
-- ⬜ Multi-agency tenant isolation (org scoping)
+- ✅ **3.1 LearningEvent capture (§11)** (verified in browser) — on WON/LOST, `recordLearningEvent` (`src/lib/learning.ts`) stores predicted-vs-actual + a computed recalibration proposal (`PENDING_REVIEW`); hooked into `changeLeadStatus`. `computeRecalibration` unit-tested (over-optimistic→raise threshold, under-estimated→lower); live hook verified (Ada→LOST created the event). Idempotent per lead+outcome.
+- ✅ **3.2 Manager review + apply (§11)** (verified in browser) — `/learning` (Manager/Admin, in nav): lists `PENDING_REVIEW` events with predicted-vs-actual + proposal; **Approve & apply** updates the live config (threshold/weight), **Reject** records the decision; both audited (`MANAGER_OVERRIDE`), event marked APPROVED/REJECTED with reviewer + timestamp. Verified LIVE: approved a mispredict proposal → `qualifiedMinScore` 70→75 applied, event APPROVED by Admin (then reverted test data). Files: `learning/{page,actions}.tsx`.
+- ✅ **3.3 Aggregate recalibration + accuracy (§11)** (verified in browser) — `/learning` aggregate panel: overall accuracy, direction distribution (correct / over-optimistic / under-estimated / no-prediction), and a **net recalibration** proposal shown only on a clear systematic bias (|over−under|≥2). "Apply aggregate" applies it to config + audits. `computeLearningAggregate` (`src/lib/learning.ts`). Verified LIVE: 3 over-optimistic events → net proposal `qualifiedMinScore 70→75` → applied + audited (then reverted). 
+- ⬜ **3.4 Multi-agency tenant isolation (org scoping)** ◀ **NEXT** — large (add `Organization`, scope every model/query); likely its own mini-phase.
 
 ## Phase 4 — SaaS
 - ⬜ Self-serve onboarding, billing/metering, plan gating · ⬜ deploy maturity (Docker/CI/CD/monitoring/backups, §21) · ⬜ NDPR/compliance review
@@ -123,8 +124,9 @@ _Blueprint: §3 (workflow steps 1–2), §4 Lead Management, §6 lead statuses._
 
 ## Current position
 **Phase 1 complete (1.1–1.8). Phase 2: 2.1 prompts + 2.2 config CRUD + 2.2b questions editor + 2.3 analytics + 2.5 call assistant + 2.6 security done.** Only **2.4 async pipeline** remains (deferred — needs Upstash Redis).
-**▶ DEPLOY (prepared):** `npm run build` passes (13 routes); added `postinstall: prisma generate` (Prisma client is gitignored, so Vercel needs it); wrote `DEPLOYMENT.md`. Remaining steps are account-gated (your GitHub push, Vercel import, env vars) — see `DEPLOYMENT.md`. Then Phase 3 (learning engine) / Phase 4 (SaaS).
-**`GEMINI_API_KEY` is set** but on a rate-limited free tier (needs ~1 min between qualify calls) — a billing-enabled key would make AI calls fast/reliable.
+**Deploy:** code pushed to GitHub (`mrkunmee/CSR_OS_Tomania`) and imported to Vercel. **Vercel showed the Auth.js "server configuration" error → fix: set `AUTH_SECRET` (+ `DATABASE_URL` transaction pooler, `GEMINI_API_KEY`) in Vercel env and redeploy.** Code side hardened with `trustHost: true` (pushed). Awaiting user to set env vars.
+**▶ Phase 3 underway:** 3.1 capture + 3.2 review/apply + 3.3 aggregate recalibration done — the §11 learning loop is complete (per-event and aggregate, both manager-approved, both applying to live config). **Next: 3.4 multi-agency tenant isolation** (large — its own mini-phase).
+**`GEMINI_API_KEY`** is a rate-limited free-tier key — use a billing-enabled key in prod.
 
 > **Dev-env note:** Turbopack cold compiles are very slow here (60–90s per first route hit). Functionality is unaffected; just expect lag on first navigation to a new route.
 

@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth-helpers";
 import { logAudit } from "@/lib/audit";
 import { companySchema, leadSchema } from "@/lib/validation";
 import { canTransition } from "@/lib/lead-status";
+import { recordLearningEvent } from "@/lib/learning";
 import type { LeadStatus } from "@/generated/prisma/enums";
 
 export type FormState =
@@ -202,6 +203,11 @@ export async function changeLeadStatus(
     summary: `Status: ${lead.status} → ${status}`,
     metadata: { from: lead.status, to: status },
   });
+
+  // Continuous learning (§11): capture predicted-vs-actual when a deal resolves.
+  if (status === "WON" || status === "LOST") {
+    await recordLearningEvent(leadId, status);
+  }
 
   revalidatePath(`/leads/${leadId}`);
   return undefined;

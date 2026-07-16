@@ -22,20 +22,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = credentialsSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email: parsed.data.email },
-        });
-        if (!user) return null;
+        try {
+          const user = await prisma.user.findUnique({
+            where: { email: parsed.data.email },
+          });
+          if (!user) return null;
 
-        const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
-        if (!valid) return null;
+          const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
+          if (!valid) return null;
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-        };
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+          };
+        } catch (err) {
+          // A DB/connection failure here would otherwise masquerade as
+          // "invalid credentials" — log it so it's visible in the server logs.
+          console.error("[auth] authorize error (check DATABASE_URL / DB reachability):", err);
+          return null;
+        }
       },
     }),
   ],

@@ -64,8 +64,8 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 
   assignedLeads   Lead[]           @relation("CSRAssignment")
   calls           Call[]
@@ -112,8 +112,8 @@ model Company {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 
   leads Lead[]
 }
@@ -130,8 +130,8 @@ model Lead {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 
   company   Company? @relation(fields: [companyId], references: [id])
   companyId String?
@@ -159,8 +159,8 @@ model Call {
   endedAt   DateTime?
   notes     String?
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 
   responses Response[]
   scores    Score[]
@@ -177,8 +177,8 @@ model Response {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 
   @@unique([callId, questionKey])
 }
@@ -194,8 +194,8 @@ model Score {
   confidenceScore Int // 0-100
   createdAt       DateTime @default(now())
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 }
 
 // AI recommendation with full explainability payload (Blueprint §8, §10)
@@ -235,8 +235,8 @@ model Recommendation {
 
   createdAt DateTime @default(now())
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 }
 
 // Partner/service referral (Blueprint §7)
@@ -249,8 +249,8 @@ model PartnerReferral {
   reason           String // gap that triggered this (NAFDAC, logistics, branding, website, creatives)
   createdAt        DateTime       @default(now())
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 }
 
 // Follow-up tasks (Blueprint §8 follow-up, §12 cadence)
@@ -269,8 +269,8 @@ model Task {
   status    TaskStatus @default(OPEN)
   createdAt DateTime   @default(now())
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 }
 
 // Event audit log (Blueprint §13)
@@ -294,8 +294,8 @@ model AuditLog {
   metadata  Json?
   createdAt DateTime    @default(now())
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 }
 
 // Continuous learning (Blueprint §11) — deferred to Phase 3, modeled now
@@ -319,8 +319,8 @@ model LearningEvent {
   reviewedAt       DateTime?
   createdAt        DateTime              @default(now())
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 }
 
 // ---------------------------------------------------------------------------
@@ -337,8 +337,8 @@ model Package {
   features    Json?
   active      Boolean @default(true)
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 
   recommendations Recommendation[]
 
@@ -360,8 +360,8 @@ model PartnerService {
   description String?
   active      Boolean     @default(true)
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 
   referrals PartnerReferral[]
 }
@@ -373,8 +373,8 @@ model ScoringWeight {
   weight Float
   active Boolean @default(true)
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 
   @@unique([organizationId, key])
 }
@@ -385,8 +385,8 @@ model QualificationThreshold {
   key   String // "qualifiedMinScore", ...
   value Float
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 
   @@unique([organizationId, key])
 }
@@ -401,8 +401,8 @@ model QualificationQuestion {
   branchRules Json? // conditions -> next question keys
   active      Boolean @default(true)
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 
   @@unique([organizationId, key])
 }
@@ -416,8 +416,8 @@ model PromptTemplate {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 
   @@unique([organizationId, name, version])
 }
@@ -429,8 +429,8 @@ model FollowUpCadence {
   offsetDays Int // days after qualification to schedule first follow-up
   active     Boolean              @default(true)
 
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  organizationId String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 
   @@unique([organizationId, outcome])
 }

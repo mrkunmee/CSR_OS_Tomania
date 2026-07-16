@@ -64,6 +64,8 @@ export async function createLead(
     };
   }
 
+  const organizationId = user.organizationId;
+
   // CSRs can only create leads assigned to themselves.
   const assignedToId =
     user.role === "CSR" ? user.id : lead.data.assignedToId || null;
@@ -72,19 +74,21 @@ export async function createLead(
   // (avoids interactive $transaction, which times out over the Supabase pooler).
   const created = await prisma.lead.create({
     data: {
+      organization: { connect: { id: organizationId } },
       contactName: lead.data.contactName,
       contactPhone: lead.data.contactPhone,
       contactEmail: lead.data.contactEmail ?? null,
       source: lead.data.source,
       isDecisionMaker: lead.data.isDecisionMaker ?? false,
       status: assignedToId ? "ASSIGNED" : "NEW",
-      company: { create: { ...company.data } },
+      company: { create: { ...company.data, organizationId } },
       ...(assignedToId ? { assignedTo: { connect: { id: assignedToId } } } : {}),
     },
   });
 
   await logAudit({
     action: "CSR_ACTION",
+    organizationId,
     actorId: user.id,
     leadId: created.id,
     summary: `Lead created for ${company.data.name}`,
@@ -98,8 +102,9 @@ export async function updateLead(
   formData: FormData,
 ): Promise<FormState> {
   const user = await requireUser();
+  const organizationId = user.organizationId;
   const leadId = String(formData.get("leadId") ?? "");
-  const existing = await prisma.lead.findUnique({ where: { id: leadId } });
+  const existing = await prisma.lead.findFirst({ where: { id: leadId, organizationId } });
   if (!existing) return { error: "Lead not found." };
   if (user.role === "CSR" && existing.assignedToId !== user.id) {
     return { error: "You can only edit leads assigned to you." };
@@ -124,12 +129,13 @@ export async function updateLead(
       isDecisionMaker: lead.data.isDecisionMaker ?? false,
       company: existing.companyId
         ? { update: { ...company.data } }
-        : { create: { ...company.data } },
+        : { create: { ...company.data, organizationId } },
     },
   });
 
   await logAudit({
     action: "CSR_ACTION",
+    organizationId,
     actorId: user.id,
     leadId,
     summary: `Lead details updated`,
@@ -144,20 +150,23 @@ export async function assignLead(
 ): Promise<FormState> {
   const user = await requireUser();
   if (user.role === "CSR") return { error: "Only managers can reassign leads." };
+  const organizationId = user.organizationId;
 
   const leadId = String(formData.get("leadId") ?? "");
   const raw = String(formData.get("assignedToId") ?? "");
   const assignedToId = raw || null;
 
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+  const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId } });
   if (!lead) return { error: "Lead not found." };
 
   const status: LeadStatus =
     assignedToId && lead.status === "NEW" ? "ASSIGNED" : lead.status;
 
+  // Only allow assigning to a user in the same organization.
   const assignee = assignedToId
-    ? await prisma.user.findUnique({ where: { id: assignedToId } })
+    ? await prisma.user.findFirst({ where: { id: assignedToId, organizationId } })
     : null;
+  if (assignedToId && !assignee) return { error: "That user isn't in your organization." };
 
   await prisma.lead.update({
     where: { id: leadId },
@@ -166,6 +175,7 @@ export async function assignLead(
 
   await logAudit({
     action: "CSR_ACTION",
+    organizationId,
     actorId: user.id,
     leadId,
     summary: assignedToId
@@ -182,10 +192,11 @@ export async function changeLeadStatus(
   formData: FormData,
 ): Promise<FormState> {
   const user = await requireUser();
+  const organizationId = user.organizationId;
   const leadId = String(formData.get("leadId") ?? "");
   const status = String(formData.get("status") ?? "") as LeadStatus;
 
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+  const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId } });
   if (!lead) return { error: "Lead not found." };
   if (user.role === "CSR" && lead.assignedToId !== user.id) {
     return { error: "You can only update leads assigned to you." };
@@ -198,6 +209,7 @@ export async function changeLeadStatus(
 
   await logAudit({
     action: "LEAD_STATUS_CHANGE",
+    organizationId,
     actorId: user.id,
     leadId,
     summary: `Status: ${lead.status} → ${status}`,

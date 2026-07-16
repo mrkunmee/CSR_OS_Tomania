@@ -70,8 +70,8 @@ export type LearningAggregate = {
  * prediction accuracy and a NET recalibration proposal only when a systematic
  * bias is clear (|over − under| ≥ 2) — avoids chasing single-deal noise.
  */
-export async function computeLearningAggregate(): Promise<LearningAggregate> {
-  const events = await prisma.learningEvent.findMany({ select: { proposedChanges: true } });
+export async function computeLearningAggregate(organizationId: string): Promise<LearningAggregate> {
+  const events = await prisma.learningEvent.findMany({ where: { organizationId }, select: { proposedChanges: true } });
 
   const byDirection = { over_optimistic: 0, under_estimated: 0, aligned: 0, unknown: 0 };
   let correct = 0;
@@ -90,7 +90,7 @@ export async function computeLearningAggregate(): Promise<LearningAggregate> {
   let netProposal: LearningAggregate["netProposal"] = null;
   const net = byDirection.over_optimistic - byDirection.under_estimated;
   if (Math.abs(net) >= 2) {
-    const th = await prisma.qualificationThreshold.findFirst({ where: { key: "qualifiedMinScore" } });
+    const th = await prisma.qualificationThreshold.findFirst({ where: { key: "qualifiedMinScore", organizationId } });
     if (th) {
       const delta = net > 0 ? 5 : -5;
       netProposal = {
@@ -110,6 +110,10 @@ export async function computeLearningAggregate(): Promise<LearningAggregate> {
 
 /** Record a LearningEvent for a resolved deal (idempotent per lead+outcome). */
 export async function recordLearningEvent(leadId: string, actualOutcome: "WON" | "LOST") {
+  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { organizationId: true } });
+  if (!lead) return;
+  const { organizationId } = lead;
+
   const existing = await prisma.learningEvent.findFirst({
     where: { leadId, actualOutcome: actualOutcome as LeadStatus },
   });
@@ -118,7 +122,7 @@ export async function recordLearningEvent(leadId: string, actualOutcome: "WON" |
   const [rec, score, threshold] = await Promise.all([
     prisma.recommendation.findFirst({ where: { leadId }, orderBy: { createdAt: "desc" } }),
     prisma.score.findFirst({ where: { leadId }, orderBy: { createdAt: "desc" } }),
-    prisma.qualificationThreshold.findFirst({ where: { key: "qualifiedMinScore" } }),
+    prisma.qualificationThreshold.findFirst({ where: { key: "qualifiedMinScore", organizationId } }),
   ]);
 
   const recal = computeRecalibration(
@@ -130,6 +134,7 @@ export async function recordLearningEvent(leadId: string, actualOutcome: "WON" |
   await prisma.learningEvent.create({
     data: {
       leadId,
+      organizationId,
       predictedOutcome: rec?.outcome ?? undefined,
       actualOutcome: actualOutcome as LeadStatus,
       predictedScore: score?.leadScore ?? undefined,

@@ -15,16 +15,17 @@ export default async function InterviewPage({
 }) {
   const { id } = await params;
   const user = await requireUser();
+  const organizationId = user.organizationId;
 
-  const lead = await prisma.lead.findUnique({
-    where: { id },
+  const lead = await prisma.lead.findFirst({
+    where: { id, organizationId },
     include: { company: true },
   });
   if (!lead) notFound();
   if (user.role === "CSR" && lead.assignedToId !== user.id) notFound();
 
   const openCall = await prisma.call.findFirst({
-    where: { leadId: id, endedAt: null },
+    where: { leadId: id, organizationId, endedAt: null },
     include: { responses: true },
     orderBy: { startedAt: "desc" },
   });
@@ -66,7 +67,7 @@ export default async function InterviewPage({
   }
 
   const questions = await prisma.qualificationQuestion.findMany({
-    where: { active: true },
+    where: { active: true, organizationId },
   });
   const answers = new Map(openCall.responses.map((r) => [r.questionKey, r.answer]));
   const active = buildActiveQuestions(questions, answers);

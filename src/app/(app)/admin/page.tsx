@@ -38,17 +38,18 @@ function ConfigCard({
 
 export default async function AdminPage() {
   // ADMIN-only — middleware also blocks non-admins, this is defense in depth.
-  await requireRole("ADMIN");
+  const { organizationId } = await requireRole("ADMIN");
+  const where = { organizationId };
 
   const [packages, partners, weights, thresholds, questions, cadences, prompts] =
     await Promise.all([
-      prisma.package.count(),
-      prisma.partnerService.count(),
-      prisma.scoringWeight.count(),
-      prisma.qualificationThreshold.count(),
-      prisma.qualificationQuestion.count(),
-      prisma.followUpCadence.count(),
-      prisma.promptTemplate.count(),
+      prisma.package.count({ where }),
+      prisma.partnerService.count({ where }),
+      prisma.scoringWeight.count({ where }),
+      prisma.qualificationThreshold.count({ where }),
+      prisma.qualificationQuestion.count({ where }),
+      prisma.followUpCadence.count({ where }),
+      prisma.promptTemplate.count({ where }),
     ]);
 
   return (

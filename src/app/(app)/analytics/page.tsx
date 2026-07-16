@@ -38,8 +38,8 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 }
 
 export default async function AnalyticsPage() {
-  await requireRole("MANAGER", "ADMIN");
-  const a = await computeAnalytics();
+  const { organizationId } = await requireRole("MANAGER", "ADMIN");
+  const a = await computeAnalytics(organizationId);
 
   const funnelMax = Math.max(1, ...a.funnel.map((f) => f.count));
   const pkgMax = Math.max(1, ...a.packageMix.map((p) => p.count));

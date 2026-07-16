@@ -8,6 +8,7 @@ import type { AuditAction } from "@/generated/prisma/enums";
  */
 export async function logAudit(input: {
   action: AuditAction;
+  organizationId: string;
   actorId?: string | null;
   leadId?: string | null;
   summary: string;
@@ -16,6 +17,7 @@ export async function logAudit(input: {
   await prisma.auditLog.create({
     data: {
       action: input.action,
+      organizationId: input.organizationId,
       actorId: input.actorId ?? undefined,
       leadId: input.leadId ?? undefined,
       summary: input.summary,

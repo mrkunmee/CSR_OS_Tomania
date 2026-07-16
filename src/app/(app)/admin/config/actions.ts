@@ -13,14 +13,15 @@ function intOrNull(v: FormDataEntryValue | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-async function audit(actorId: string, summary: string) {
-  await logAudit({ action: "CSR_ACTION", actorId, summary });
+async function audit(organizationId: string, actorId: string, summary: string) {
+  await logAudit({ action: "CSR_ACTION", organizationId, actorId, summary });
   revalidatePath("/admin/config");
 }
 
-/** Create or update a package (no delete — toggle `active` instead). */
+/** Create or update a package (no delete — toggle `active` instead). Org-scoped. */
 export async function savePackage(formData: FormData) {
   const user = await requireRole("ADMIN");
+  const organizationId = user.organizationId;
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
@@ -32,13 +33,14 @@ export async function savePackage(formData: FormData) {
     minBudget: intOrNull(formData.get("minBudget")),
     active: formData.get("active") === "on",
   };
-  if (id) await prisma.package.update({ where: { id }, data });
-  else await prisma.package.create({ data });
-  await audit(user.id, `Package "${name}" ${id ? "updated" : "created"}`);
+  if (id) await prisma.package.updateMany({ where: { id, organizationId }, data });
+  else await prisma.package.create({ data: { ...data, organizationId } });
+  await audit(organizationId, user.id, `Package "${name}" ${id ? "updated" : "created"}`);
 }
 
 export async function savePartner(formData: FormData) {
   const user = await requireRole("ADMIN");
+  const organizationId = user.organizationId;
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const type = String(formData.get("type") ?? "") as PartnerType;
@@ -49,40 +51,43 @@ export async function savePartner(formData: FormData) {
     description: String(formData.get("description") ?? "").trim() || null,
     active: formData.get("active") === "on",
   };
-  if (id) await prisma.partnerService.update({ where: { id }, data });
-  else await prisma.partnerService.create({ data });
-  await audit(user.id, `Partner service "${name}" ${id ? "updated" : "created"}`);
+  if (id) await prisma.partnerService.updateMany({ where: { id, organizationId }, data });
+  else await prisma.partnerService.create({ data: { ...data, organizationId } });
+  await audit(organizationId, user.id, `Partner service "${name}" ${id ? "updated" : "created"}`);
 }
 
 export async function saveWeight(formData: FormData) {
   const user = await requireRole("ADMIN");
+  const organizationId = user.organizationId;
   const id = String(formData.get("id") ?? "");
   const weight = parseFloat(String(formData.get("weight") ?? ""));
   if (!id || !Number.isFinite(weight)) return;
-  await prisma.scoringWeight.update({
-    where: { id },
+  await prisma.scoringWeight.updateMany({
+    where: { id, organizationId },
     data: { weight, active: formData.get("active") === "on" },
   });
-  await audit(user.id, `Scoring weight updated`);
+  await audit(organizationId, user.id, `Scoring weight updated`);
 }
 
 export async function saveThreshold(formData: FormData) {
   const user = await requireRole("ADMIN");
+  const organizationId = user.organizationId;
   const id = String(formData.get("id") ?? "");
   const value = parseFloat(String(formData.get("value") ?? ""));
   if (!id || !Number.isFinite(value)) return;
-  await prisma.qualificationThreshold.update({ where: { id }, data: { value } });
-  await audit(user.id, `Threshold updated`);
+  await prisma.qualificationThreshold.updateMany({ where: { id, organizationId }, data: { value } });
+  await audit(organizationId, user.id, `Threshold updated`);
 }
 
 export async function saveCadence(formData: FormData) {
   const user = await requireRole("ADMIN");
+  const organizationId = user.organizationId;
   const id = String(formData.get("id") ?? "");
   const offsetDays = intOrNull(formData.get("offsetDays"));
   if (!id || offsetDays == null) return;
-  await prisma.followUpCadence.update({
-    where: { id },
+  await prisma.followUpCadence.updateMany({
+    where: { id, organizationId },
     data: { offsetDays, active: formData.get("active") === "on" },
   });
-  await audit(user.id, `Follow-up cadence updated`);
+  await audit(organizationId, user.id, `Follow-up cadence updated`);
 }

@@ -18,18 +18,19 @@ export async function generateRecommendationForLead(leadId: string, actorId: str
     include: { company: true },
   });
   if (!lead) throw new Error("Lead not found.");
+  const { organizationId } = lead;
 
   // Latest call that has answers.
   const call = await prisma.call.findFirst({
-    where: { leadId, responses: { some: {} } },
+    where: { leadId, organizationId, responses: { some: {} } },
     include: { responses: { orderBy: { createdAt: "asc" } } },
     orderBy: { startedAt: "desc" },
   });
 
   const [packages, template, questions] = await Promise.all([
-    prisma.package.findMany({ where: { active: true } }),
-    prisma.promptTemplate.findFirst({ where: { active: true }, orderBy: { version: "desc" } }),
-    prisma.qualificationQuestion.findMany({ where: { active: true }, select: { key: true, category: true } }),
+    prisma.package.findMany({ where: { active: true, organizationId } }),
+    prisma.promptTemplate.findFirst({ where: { active: true, organizationId }, orderBy: { version: "desc" } }),
+    prisma.qualificationQuestion.findMany({ where: { active: true, organizationId }, select: { key: true, category: true } }),
   ]);
 
   // Map interview answers to their question category for the partner rules.
@@ -81,6 +82,7 @@ export async function generateRecommendationForLead(leadId: string, actorId: str
   const recommendation = await prisma.recommendation.create({
     data: {
       leadId,
+      organizationId,
       outcome: result.outcome,
       packageId: pkg?.id ?? null,
       estimatedValue: result.estimatedValue,
@@ -105,6 +107,7 @@ export async function generateRecommendationForLead(leadId: string, actorId: str
   await prisma.score.create({
     data: {
       leadId,
+      organizationId,
       callId: call?.id ?? null,
       leadScore: result.leadScore,
       confidenceScore: result.confidenceScore,
@@ -113,13 +116,13 @@ export async function generateRecommendationForLead(leadId: string, actorId: str
 
   // Deterministic partner referrals (§7). Rebuild from scratch so re-runs are idempotent.
   const needs = evaluatePartnerNeeds({ company: lead.company, byCategory });
-  const services = await prisma.partnerService.findMany({ where: { active: true } });
+  const services = await prisma.partnerService.findMany({ where: { active: true, organizationId } });
   await prisma.partnerReferral.deleteMany({ where: { leadId } });
   for (const need of needs) {
     const service = services.find((s) => s.type === need.type);
     if (service) {
       await prisma.partnerReferral.create({
-        data: { leadId, partnerServiceId: service.id, reason: need.reason },
+        data: { leadId, organizationId, partnerServiceId: service.id, reason: need.reason },
       });
     }
   }
@@ -127,7 +130,7 @@ export async function generateRecommendationForLead(leadId: string, actorId: str
   // Follow-up tasks (§8 follow-up, §12 cadence). Timed from the outcome's cadence;
   // replace prior open tasks so re-runs stay idempotent.
   const cadence = await prisma.followUpCadence.findFirst({
-    where: { outcome: result.outcome, active: true },
+    where: { outcome: result.outcome, active: true, organizationId },
   });
   const offsetDays = cadence?.offsetDays ?? 3;
   const firstDue = new Date(Date.now() + offsetDays * 86_400_000);
@@ -136,6 +139,7 @@ export async function generateRecommendationForLead(leadId: string, actorId: str
     await prisma.task.create({
       data: {
         leadId,
+        organizationId,
         title: step.timing ? `${step.step} (${step.timing})` : step.step,
         dueAt: new Date(firstDue.getTime() + i * 2 * 86_400_000),
         status: "OPEN",
@@ -151,6 +155,7 @@ export async function generateRecommendationForLead(leadId: string, actorId: str
 
   await logAudit({
     action: "AI_DECISION",
+    organizationId,
     actorId,
     leadId,
     summary: `AI qualified: ${result.outcome} (score ${result.leadScore}, confidence ${result.confidenceScore})`,

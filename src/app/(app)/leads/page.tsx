@@ -17,7 +17,7 @@ export default async function LeadsPage({
   const sp = await searchParams;
   const isCsr = user.role === "CSR";
 
-  const where: Prisma.LeadWhereInput = {};
+  const where: Prisma.LeadWhereInput = { organizationId: user.organizationId };
   if (isCsr) {
     where.assignedToId = user.id;
   } else if (sp.assignedToId) {
@@ -42,7 +42,7 @@ export default async function LeadsPage({
     isCsr
       ? Promise.resolve([])
       : prisma.user.findMany({
-          where: { role: "CSR" },
+          where: { role: "CSR", organizationId: user.organizationId },
           select: { id: true, name: true, email: true },
           orderBy: { email: "asc" },
         }),

@@ -13,9 +13,10 @@ import { computeLearningAggregate, type Suggestion } from "@/lib/learning";
  */
 export async function approveLearningEvent(formData: FormData) {
   const user = await requireRole("MANAGER", "ADMIN");
+  const organizationId = user.organizationId;
   const id = String(formData.get("id") ?? "");
 
-  const event = await prisma.learningEvent.findUnique({ where: { id } });
+  const event = await prisma.learningEvent.findFirst({ where: { id, organizationId } });
   if (!event || event.status !== "PENDING_REVIEW") return;
 
   const proposed = event.proposedChanges as { suggestions?: Suggestion[] } | null;
@@ -24,13 +25,13 @@ export async function approveLearningEvent(formData: FormData) {
   const applied: string[] = [];
   for (const s of suggestions) {
     if (s.type === "threshold") {
-      const th = await prisma.qualificationThreshold.findFirst({ where: { key: s.key } });
+      const th = await prisma.qualificationThreshold.findFirst({ where: { key: s.key, organizationId } });
       if (th) {
         await prisma.qualificationThreshold.update({ where: { id: th.id }, data: { value: s.to } });
         applied.push(`${s.key} ${s.from}→${s.to}`);
       }
     } else if (s.type === "weight") {
-      const w = await prisma.scoringWeight.findFirst({ where: { key: s.key } });
+      const w = await prisma.scoringWeight.findFirst({ where: { key: s.key, organizationId } });
       if (w) {
         await prisma.scoringWeight.update({ where: { id: w.id }, data: { weight: s.to } });
         applied.push(`${s.key} ${s.from}→${s.to}`);
@@ -45,6 +46,7 @@ export async function approveLearningEvent(formData: FormData) {
 
   await logAudit({
     action: "MANAGER_OVERRIDE",
+    organizationId,
     actorId: user.id,
     leadId: event.leadId ?? undefined,
     summary: applied.length
@@ -59,16 +61,18 @@ export async function approveLearningEvent(formData: FormData) {
 /** Apply the aggregate net recalibration (§11, 3.3). Recomputed server-side to avoid stale input. */
 export async function applyAggregateRecalibration() {
   const user = await requireRole("MANAGER", "ADMIN");
-  const agg = await computeLearningAggregate();
+  const organizationId = user.organizationId;
+  const agg = await computeLearningAggregate(organizationId);
   const p = agg.netProposal;
   if (!p) return;
 
-  const th = await prisma.qualificationThreshold.findFirst({ where: { key: p.key } });
+  const th = await prisma.qualificationThreshold.findFirst({ where: { key: p.key, organizationId } });
   if (!th) return;
   await prisma.qualificationThreshold.update({ where: { id: th.id }, data: { value: p.to } });
 
   await logAudit({
     action: "MANAGER_OVERRIDE",
+    organizationId,
     actorId: user.id,
     summary: `Applied aggregate recalibration: ${p.key} ${p.from}→${p.to}`,
     metadata: { aggregate: true, key: p.key, from: p.from, to: p.to },
@@ -79,9 +83,10 @@ export async function applyAggregateRecalibration() {
 
 export async function rejectLearningEvent(formData: FormData) {
   const user = await requireRole("MANAGER", "ADMIN");
+  const organizationId = user.organizationId;
   const id = String(formData.get("id") ?? "");
 
-  const event = await prisma.learningEvent.findUnique({ where: { id } });
+  const event = await prisma.learningEvent.findFirst({ where: { id, organizationId } });
   if (!event || event.status !== "PENDING_REVIEW") return;
 
   await prisma.learningEvent.update({
@@ -91,6 +96,7 @@ export async function rejectLearningEvent(formData: FormData) {
 
   await logAudit({
     action: "MANAGER_OVERRIDE",
+    organizationId,
     actorId: user.id,
     leadId: event.leadId ?? undefined,
     summary: "Rejected proposed recalibration",

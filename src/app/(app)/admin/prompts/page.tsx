@@ -4,9 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { PromptAdmin, type PromptGroup } from "./prompt-admin";
 
 export default async function PromptsPage() {
-  await requireRole("ADMIN");
+  const { organizationId } = await requireRole("ADMIN");
 
   const templates = await prisma.promptTemplate.findMany({
+    where: { organizationId },
     orderBy: [{ name: "asc" }, { version: "desc" }],
   });
 

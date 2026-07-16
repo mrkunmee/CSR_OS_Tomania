@@ -14,8 +14,11 @@ export default async function DashboardPage() {
   const user = await requireUser();
   const isCsr = user.role === "CSR";
 
-  // CSRs see only their own book; managers/admins see the whole pipeline.
-  const leadWhere = isCsr ? { assignedToId: user.id } : {};
+  const organizationId = user.organizationId;
+  // CSRs see only their own book; managers/admins see the whole org pipeline.
+  const leadWhere = isCsr
+    ? { organizationId, assignedToId: user.id }
+    : { organizationId };
 
   const [totalLeads, qualified, needsWork, openTasks] = await Promise.all([
     prisma.lead.count({ where: leadWhere }),
@@ -26,7 +29,7 @@ export default async function DashboardPage() {
       where: { ...leadWhere, status: { in: ["NEW", "ASSIGNED", "IN_QUALIFICATION", "NEEDS_NURTURING"] } },
     }),
     prisma.task.count({
-      where: { status: "OPEN", ...(isCsr ? { lead: { assignedToId: user.id } } : {}) },
+      where: { organizationId, status: "OPEN", ...(isCsr ? { lead: { assignedToId: user.id } } : {}) },
     }),
   ]);
 

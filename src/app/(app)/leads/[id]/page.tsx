@@ -34,9 +34,10 @@ export default async function LeadDetailPage({
 }) {
   const { id } = await params;
   const user = await requireUser();
+  const organizationId = user.organizationId;
 
-  const lead = await prisma.lead.findUnique({
-    where: { id },
+  const lead = await prisma.lead.findFirst({
+    where: { id, organizationId },
     include: {
       company: true,
       assignedTo: true,
@@ -69,7 +70,7 @@ export default async function LeadDetailPage({
   // Deterministic confidence (§9) — computed independently of the AI's number.
   let confidence = null as ReturnType<typeof computeDataConfidence> | null;
   if (hasInterviewData) {
-    const questions = await prisma.qualificationQuestion.findMany({ where: { active: true } });
+    const questions = await prisma.qualificationQuestion.findMany({ where: { active: true, organizationId } });
     const totalBaseQuestions = buildActiveQuestions(questions, new Map()).length;
     confidence = computeDataConfidence({
       answered,
@@ -84,7 +85,7 @@ export default async function LeadDetailPage({
   let packages: { id: string; name: string }[] = [];
   if (recommendation) {
     const pkgs = await prisma.package.findMany({
-      where: { active: true },
+      where: { active: true, organizationId },
       select: { id: true, name: true, minBudget: true, priceMin: true },
     });
     rulesPackageName = pickPackageByBudget(pkgs, lead.company?.marketingBudget ?? null)?.name ?? null;
@@ -94,7 +95,7 @@ export default async function LeadDetailPage({
   const canManage = user.role !== "CSR";
   const csrs = canManage
     ? await prisma.user.findMany({
-        where: { role: "CSR" },
+        where: { role: "CSR", organizationId },
         select: { id: true, name: true, email: true },
         orderBy: { email: "asc" },
       })

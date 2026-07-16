@@ -5,9 +5,10 @@ import { branchRulesToText } from "@/lib/branch-rules";
 import { QuestionForm, type QuestionData } from "./question-form";
 
 export default async function QuestionsPage() {
-  await requireRole("ADMIN");
+  const { organizationId } = await requireRole("ADMIN");
 
   const questions = await prisma.qualificationQuestion.findMany({
+    where: { organizationId },
     orderBy: { order: "asc" },
   });
 

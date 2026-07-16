@@ -10,7 +10,7 @@ export default async function NewLeadPage() {
 
   const csrs = canAssign
     ? await prisma.user.findMany({
-        where: { role: "CSR" },
+        where: { role: "CSR", organizationId: user.organizationId },
         select: { id: true, name: true, email: true },
         orderBy: { email: "asc" },
       })

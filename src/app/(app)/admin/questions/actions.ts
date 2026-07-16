@@ -15,6 +15,7 @@ export async function saveQuestion(
   formData: FormData,
 ): Promise<QuestionState> {
   const user = await requireRole("ADMIN");
+  const organizationId = user.organizationId;
   const id = String(formData.get("id") ?? "");
   const key = String(formData.get("key") ?? "").trim();
   const text = String(formData.get("text") ?? "").trim();
@@ -29,8 +30,8 @@ export async function saveQuestion(
 
   const { rules, targets } = parseBranchRulesText(branchText);
 
-  // Reject branch targets that don't reference a real question key.
-  const all = await prisma.qualificationQuestion.findMany({ select: { key: true } });
+  // Reject branch targets that don't reference a real question key (in this org).
+  const all = await prisma.qualificationQuestion.findMany({ where: { organizationId }, select: { key: true } });
   const known = new Set(all.map((q) => q.key));
   known.add(key);
   const unknown = [...new Set(targets.filter((t) => !known.has(t)))];
@@ -48,9 +49,9 @@ export async function saveQuestion(
 
   try {
     if (id) {
-      await prisma.qualificationQuestion.update({ where: { id }, data });
+      await prisma.qualificationQuestion.updateMany({ where: { id, organizationId }, data });
     } else {
-      await prisma.qualificationQuestion.create({ data: { key, ...data } });
+      await prisma.qualificationQuestion.create({ data: { key, ...data, organizationId } });
     }
   } catch {
     return { error: "Save failed — is the key unique?" };
@@ -58,6 +59,7 @@ export async function saveQuestion(
 
   await logAudit({
     action: "CSR_ACTION",
+    organizationId,
     actorId: user.id,
     summary: `Interview question "${key}" ${id ? "updated" : "created"}`,
   });

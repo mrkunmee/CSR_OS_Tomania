@@ -17,14 +17,15 @@ function outcomeLabel(o: string | null): string {
 }
 
 export default async function LearningPage() {
-  await requireRole("MANAGER", "ADMIN");
+  const { organizationId } = await requireRole("MANAGER", "ADMIN");
 
   const [events, agg] = await Promise.all([
     prisma.learningEvent.findMany({
+      where: { organizationId },
       include: { lead: { include: { company: true } }, reviewer: true },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     }),
-    computeLearningAggregate(),
+    computeLearningAggregate(organizationId),
   ]);
 
   const pending = events.filter((e) => e.status === "PENDING_REVIEW");

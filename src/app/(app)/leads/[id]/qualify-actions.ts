@@ -13,9 +13,10 @@ export async function generateRecommendation(
   formData: FormData,
 ): Promise<QualifyState> {
   const user = await requireUser();
+  const organizationId = user.organizationId;
   const leadId = String(formData.get("leadId") ?? "");
 
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+  const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId } });
   if (!lead) return { error: "Lead not found." };
   if (user.role === "CSR" && lead.assignedToId !== user.id) {
     return { error: "You can only qualify leads assigned to you." };
@@ -34,6 +35,7 @@ export async function generateRecommendation(
     await prisma.auditLog.create({
       data: {
         action: "AI_DECISION",
+        organizationId,
         actorId: user.id,
         leadId,
         summary: "AI qualification failed",

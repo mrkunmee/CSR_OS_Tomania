@@ -12,7 +12,9 @@ import { rateLimit } from "@/lib/rate-limit";
 /** Load a lead and enforce that the current user may work on it. */
 async function authorizeLead(leadId: string) {
   const user = await requireUser();
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+  const lead = await prisma.lead.findFirst({
+    where: { id: leadId, organizationId: user.organizationId },
+  });
   if (!lead) return { user, lead: null as null };
   if (user.role === "CSR" && lead.assignedToId !== user.id) {
     return { user, lead: null as null };
@@ -25,13 +27,14 @@ export async function startInterview(formData: FormData) {
   const leadId = String(formData.get("leadId") ?? "");
   const { user, lead } = await authorizeLead(leadId);
   if (!lead) return;
+  const organizationId = lead.organizationId;
 
   // Reuse an open call if one exists; otherwise create one.
   const existing = await prisma.call.findFirst({
-    where: { leadId, endedAt: null },
+    where: { leadId, organizationId, endedAt: null },
   });
   if (!existing) {
-    await prisma.call.create({ data: { leadId, csrId: user.id } });
+    await prisma.call.create({ data: { leadId, csrId: user.id, organizationId } });
     if (canTransition(lead.status, "IN_QUALIFICATION")) {
       await prisma.lead.update({
         where: { id: leadId },
@@ -40,6 +43,7 @@ export async function startInterview(formData: FormData) {
     }
     await logAudit({
       action: "CSR_ACTION",
+      organizationId,
       actorId: user.id,
       leadId,
       summary: "Qualification interview started",
@@ -60,14 +64,15 @@ export async function saveResponses(
   const callId = String(formData.get("callId") ?? "");
   const { user, lead } = await authorizeLead(leadId);
   if (!lead) return { error: "Not allowed." };
+  const organizationId = lead.organizationId;
 
   const call = await prisma.call.findFirst({
-    where: { id: callId, leadId, endedAt: null },
+    where: { id: callId, leadId, organizationId, endedAt: null },
   });
   if (!call) return { error: "This interview is no longer open." };
 
   const questions = await prisma.qualificationQuestion.findMany({
-    where: { active: true },
+    where: { active: true, organizationId },
     select: { key: true, text: true },
   });
   const textByKey = new Map(questions.map((q) => [q.key, q.text]));
@@ -88,7 +93,7 @@ export async function saveResponses(
     await prisma.response.upsert({
       where: { callId_questionKey: { callId, questionKey } },
       update: { answer, questionText },
-      create: { callId, questionKey, questionText, answer },
+      create: { callId, questionKey, questionText, answer, organizationId },
     });
     saved++;
   }
@@ -103,6 +108,7 @@ export async function saveResponses(
 
   await logAudit({
     action: "CSR_ACTION",
+    organizationId,
     actorId: user.id,
     leadId,
     summary: `Saved ${saved} interview response${saved === 1 ? "" : "s"}`,
@@ -122,15 +128,16 @@ export async function getCallAssist(
   const leadId = String(formData.get("leadId") ?? "");
   const { user, lead } = await authorizeLead(leadId);
   if (!lead) return { error: "Not allowed." };
+  const organizationId = lead.organizationId;
 
   const limit = rateLimit(`assist:${user.id}`, 12, 60_000);
   if (!limit.ok) {
     return { error: `Rate limit reached. Try again in ${limit.retryAfterSec}s.` };
   }
 
-  const full = await prisma.lead.findUnique({ where: { id: leadId }, include: { company: true } });
+  const full = await prisma.lead.findFirst({ where: { id: leadId, organizationId }, include: { company: true } });
   const call = await prisma.call.findFirst({
-    where: { leadId, endedAt: null },
+    where: { leadId, organizationId, endedAt: null },
     include: { responses: { orderBy: { createdAt: "asc" } } },
     orderBy: { startedAt: "desc" },
   });
@@ -159,6 +166,7 @@ export async function getCallAssist(
     const { result } = await runCallAssist(prompt);
     await logAudit({
       action: "API_CALL",
+      organizationId,
       actorId: user.id,
       leadId,
       summary: "Live call assist requested",
@@ -175,14 +183,16 @@ export async function completeInterview(formData: FormData) {
   const callId = String(formData.get("callId") ?? "");
   const { user, lead } = await authorizeLead(leadId);
   if (!lead) return;
+  const organizationId = lead.organizationId;
 
   await prisma.call.updateMany({
-    where: { id: callId, leadId, endedAt: null },
+    where: { id: callId, leadId, organizationId, endedAt: null },
     data: { endedAt: new Date() },
   });
 
   await logAudit({
     action: "CSR_ACTION",
+    organizationId,
     actorId: user.id,
     leadId,
     summary: "Qualification interview completed",

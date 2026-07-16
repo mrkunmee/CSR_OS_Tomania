@@ -20,14 +20,14 @@ function Section({ title, hint, children }: { title: string; hint: string; child
 }
 
 export default async function ConfigPage() {
-  await requireRole("ADMIN");
+  const { organizationId } = await requireRole("ADMIN");
 
   const [packages, partners, weights, thresholds, cadences] = await Promise.all([
-    prisma.package.findMany({ orderBy: { minBudget: "asc" } }),
-    prisma.partnerService.findMany({ orderBy: { type: "asc" } }),
-    prisma.scoringWeight.findMany({ orderBy: { key: "asc" } }),
-    prisma.qualificationThreshold.findMany({ orderBy: { key: "asc" } }),
-    prisma.followUpCadence.findMany({ orderBy: { offsetDays: "asc" } }),
+    prisma.package.findMany({ where: { organizationId }, orderBy: { minBudget: "asc" } }),
+    prisma.partnerService.findMany({ where: { organizationId }, orderBy: { type: "asc" } }),
+    prisma.scoringWeight.findMany({ where: { organizationId }, orderBy: { key: "asc" } }),
+    prisma.qualificationThreshold.findMany({ where: { organizationId }, orderBy: { key: "asc" } }),
+    prisma.followUpCadence.findMany({ where: { organizationId }, orderBy: { offsetDays: "asc" } }),
   ]);
 
   return (

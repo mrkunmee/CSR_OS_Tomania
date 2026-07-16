@@ -7,15 +7,16 @@ const POSITIVE_OUTCOMES = new Set(["QUALIFIED", "QUALIFIED_WITH_CONDITIONS"]);
 export type Analytics = Awaited<ReturnType<typeof computeAnalytics>>;
 
 /** All Phase-2.3 metrics (§4), computed from the DB. Deterministic, no AI. */
-export async function computeAnalytics() {
+export async function computeAnalytics(organizationId: string) {
   const [leads, recs, referrals, scores] = await Promise.all([
-    prisma.lead.findMany({ include: { assignedTo: true } }),
+    prisma.lead.findMany({ where: { organizationId }, include: { assignedTo: true } }),
     prisma.recommendation.findMany({
+      where: { organizationId },
       include: { recommendedPackage: true },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.partnerReferral.findMany({ include: { partnerService: true } }),
-    prisma.score.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.partnerReferral.findMany({ where: { organizationId }, include: { partnerService: true } }),
+    prisma.score.findMany({ where: { organizationId }, orderBy: { createdAt: "desc" } }),
   ]);
 
   // Pipeline funnel — count per status, in lifecycle order.

@@ -15,9 +15,13 @@ export async function completeTask(
   formData: FormData,
 ): Promise<ActionState> {
   const user = await requireUser();
+  const organizationId = user.organizationId;
   const taskId = String(formData.get("taskId") ?? "");
 
-  const task = await prisma.task.findUnique({ where: { id: taskId }, include: { lead: true } });
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, organizationId },
+    include: { lead: true },
+  });
   if (!task) return { error: "Task not found." };
   if (user.role === "CSR" && task.lead.assignedToId !== user.id) {
     return { error: "Not your task." };
@@ -26,6 +30,7 @@ export async function completeTask(
   await prisma.task.update({ where: { id: taskId }, data: { status: "DONE" } });
   await logAudit({
     action: "CSR_ACTION",
+    organizationId,
     actorId: user.id,
     leadId: task.leadId,
     summary: `Completed task: ${task.title}`,
@@ -45,6 +50,7 @@ export async function overrideRecommendation(
 ): Promise<ActionState> {
   const user = await requireUser();
   if (user.role === "CSR") return { error: "Only managers can override." };
+  const organizationId = user.organizationId;
 
   const leadId = String(formData.get("leadId") ?? "");
   const outcome = String(formData.get("outcome") ?? "") as QualificationOutcome;
@@ -57,8 +63,11 @@ export async function overrideRecommendation(
     return { error: "Pick a valid outcome." };
   }
 
+  const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId } });
+  if (!lead) return { error: "Lead not found." };
+
   const rec = await prisma.recommendation.findFirst({
-    where: { leadId },
+    where: { leadId, organizationId },
     orderBy: { createdAt: "desc" },
   });
   if (!rec) return { error: "No recommendation to override yet." };
@@ -84,10 +93,11 @@ export async function overrideRecommendation(
   if (scoreRaw !== "") {
     const leadScore = Math.max(0, Math.min(100, parseInt(scoreRaw, 10) || 0));
     await prisma.score.create({
-      data: { leadId, leadScore, confidenceScore: rec.confidenceLevel },
+      data: { leadId, organizationId, leadScore, confidenceScore: rec.confidenceLevel },
     });
     await logAudit({
       action: "SCORE_CHANGE",
+      organizationId,
       actorId: user.id,
       leadId,
       summary: `Manager set lead score to ${leadScore}`,
@@ -96,6 +106,7 @@ export async function overrideRecommendation(
 
   await logAudit({
     action: "MANAGER_OVERRIDE",
+    organizationId,
     actorId: user.id,
     leadId,
     summary: `Override → ${outcome}: ${reason}`,

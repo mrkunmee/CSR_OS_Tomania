@@ -13,8 +13,8 @@ export default async function EditLeadPage({
   const { id } = await params;
   const user = await requireUser();
 
-  const lead = await prisma.lead.findUnique({
-    where: { id },
+  const lead = await prisma.lead.findFirst({
+    where: { id, organizationId: user.organizationId },
     include: { company: true },
   });
 

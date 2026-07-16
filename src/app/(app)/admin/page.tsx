@@ -41,7 +41,7 @@ export default async function AdminPage() {
   const { organizationId } = await requireRole("ADMIN");
   const where = { organizationId };
 
-  const [packages, partners, weights, thresholds, questions, cadences, prompts] =
+  const [packages, partners, weights, thresholds, questions, cadences, prompts, team] =
     await Promise.all([
       prisma.package.count({ where }),
       prisma.partnerService.count({ where }),
@@ -50,6 +50,7 @@ export default async function AdminPage() {
       prisma.qualificationQuestion.count({ where }),
       prisma.followUpCadence.count({ where }),
       prisma.promptTemplate.count({ where }),
+      prisma.user.count({ where }),
     ]);
 
   return (
@@ -68,6 +69,7 @@ export default async function AdminPage() {
         <ConfigCard title="Questions" count={questions} hint="Dynamic interview questions + branching" href="/admin/questions" />
         <ConfigCard title="Follow-up cadences" count={cadences} hint="Per-outcome timing" href="/admin/config" />
         <ConfigCard title="Prompt templates" count={prompts} hint="Versioned Gemini prompts" href="/admin/prompts" />
+        <ConfigCard title="Team" count={team} hint="Members of this organization" href="/admin/team" />
       </div>
     </div>
   );

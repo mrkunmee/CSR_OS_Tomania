@@ -40,7 +40,7 @@ export const authConfig = {
       const isLoggedIn = !!auth?.user;
 
       // Public routes
-      if (pathname.startsWith("/login")) return true;
+      if (pathname.startsWith("/login") || pathname.startsWith("/signup")) return true;
 
       // Everything else requires a session
       if (!isLoggedIn) return false; // → redirect to signIn page

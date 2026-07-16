@@ -122,15 +122,16 @@ _Blueprint: §3 (workflow steps 1–2), §4 Lead Management, §6 lead statuses._
 
 **→ Phase 3 (learning engine + multi-agency) is COMPLETE.**
 
-## Phase 4 — SaaS
-- ⬜ Self-serve onboarding, billing/metering, plan gating · ⬜ deploy maturity (Docker/CI/CD/monitoring/backups, §21) · ⬜ NDPR/compliance review
+## Phase 4 — SaaS  (OUT OF SCOPE — internal tool, not marketed)
+- ~~Self-serve onboarding, billing/metering, plan gating~~ — not needed (own use).
+- ⬜ (optional) deploy maturity: Docker · monitoring (Sentry). CI/CD ✅ Vercel; backups ✅ Supabase.
 
 ---
 
 ## Current position
 **Phase 1 complete (1.1–1.8). Phase 2: 2.1 prompts + 2.2 config CRUD + 2.2b questions editor + 2.3 analytics + 2.5 call assistant + 2.6 security done.** Only **2.4 async pipeline** remains (deferred — needs Upstash Redis).
 **Deploy: ✅ LIVE & GREEN** at `https://csr-os-tomania.vercel.app` (verified — admin login → dashboard with real data). Fixes that got it green: `trustHost: true` (code), `AUTH_SECRET` set in Vercel, and `DATABASE_URL` = Supabase **Session pooler** :5432 (the direct `db.<ref>` host is IPv6-only → unreachable from Vercel — that was the login failure). `authorize` now logs DB errors server-side. GitHub `mrkunmee/CSR_OS_Tomania`. **TODO:** rotate the DB password + Gemini key (shared in chat during setup).
-**▶ PHASES 1–3 COMPLETE.** Learning engine (3.1–3.3) + multi-agency (3.4a schema + 3.4b isolation + 3.4c onboarding, verified with 3 orgs). **Only remaining work needs external resources/decisions:** 2.4 async pipeline (needs **Upstash Redis**) · Phase 4 SaaS — billing (**Stripe** + pricing), monitoring (**Sentry** DSN), Docker (optional), NDPR review (legal). Backups already handled by Supabase; CI/CD via Vercel.
+**▶ PHASES 1–3 COMPLETE.** Learning engine (3.1–3.3) + multi-agency (3.4a schema + 3.4b isolation + 3.4c onboarding, verified with 3 orgs). **Scope note:** this is an **internal tool** (own use, not a marketed SaaS) — Phase 4 self-serve onboarding / billing / plan-gating is **OUT OF SCOPE**. Remaining optional work: 2.4 async pipeline (needs **Upstash Redis**) · monitoring (**Sentry** DSN) · Docker (optional). Backups handled by Supabase; CI/CD via Vercel.
 **⚠️ Before real production use:** rotate DB password + Gemini key; remove test orgs (Acme, BrightAds) created during 3.4 verification.
 **`GEMINI_API_KEY`** is a rate-limited free-tier key — use a billing-enabled key in prod.
 

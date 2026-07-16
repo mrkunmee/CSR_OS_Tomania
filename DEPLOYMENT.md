@@ -29,7 +29,7 @@ git push -u origin main
 ## Step 3 — Environment variables (Vercel → Settings → Environment Variables)
 | Name | Value | Notes |
 |---|---|---|
-| `DATABASE_URL` | Supabase **Session pooler** URI (port **5432**, host `aws-0-…pooler.supabase.com`) | The known-good string (works locally with our `pg` adapter). **Do NOT use the direct `db.<ref>.supabase.co` host — it's IPv6-only and unreachable from Vercel** (this is the #1 cause of prod login failing while local works). Percent-encode the password (`#`→`%23`, `%`→`%25`). Must be the **same seeded project**. |
+| `DATABASE_URL` | Supabase **Transaction pooler** URI (port **6543**, host `aws-0-…pooler.supabase.com`, user `postgres.<ref>`) | **Serverless-safe** — the Session pooler (:5432) caps at 15 clients and exhausts under Vercel (`EMAXCONNSESSION` → "server error"). Verified working with our `pg` driver adapter. **Do NOT use the direct `db.<ref>.supabase.co` host** (IPv6-only, unreachable from Vercel). Percent-encode the password (`#`→`%23`, `%`→`%25`). For `prisma migrate`, temporarily switch to the Session pooler :5432. |
 | `AUTH_SECRET` | a fresh secret | Generate a NEW one for prod: `openssl rand -base64 32`. Don't reuse the dev value. |
 | `AUTH_TRUST_HOST` | `true` | Lets Auth.js trust the Vercel host. |
 | `GEMINI_API_KEY` | a **billing-enabled** Gemini key | The current dev key is rate-limited free tier; use a paid key and rotate the shared dev one. |
@@ -46,7 +46,7 @@ git push -u origin main
 - [ ] Add error monitoring (e.g. Sentry) — the one remaining `SECURITY.md` gap.
 
 ## Notes / caveats
-- **Pooler choice:** use the **Session pooler (5432)** for `DATABASE_URL` — it's IPv4 and full-featured, and it's the exact string proven working with our `pg` driver adapter. (The Transaction pooler :6543 is a later scale optimization but can trip prepared-statement issues with the `pg` adapter.) The direct `db.<ref>.supabase.co` host is IPv6-only and won't work from Vercel.
+- **Pooler choice:** use the **Transaction pooler (:6543)** for `DATABASE_URL` on Vercel — it multiplexes and is serverless-safe. The Session pooler (:5432) holds one connection per client and caps at **15**, which exhausts under serverless (`EMAXCONNSESSION`). Our `pg` adapter works fine with :6543 (verified: 20 concurrent queries, no prepared-statement errors). `src/lib/prisma.ts` also bounds the per-instance pool (`max: 3`). The direct `db.<ref>.supabase.co` host is IPv6-only and won't work from Vercel. Run one-off `prisma migrate` against the Session pooler :5432.
 - **"Invalid email or password" on prod but works locally** = a `DATABASE_URL` problem (Auth.js reports DB errors in `authorize` as invalid credentials). Check the Vercel **Functions log** — `authorize` now logs the real DB error there.
 - **Seeded demo data** (2 leads, etc.) lives in the shared DB and will appear in production. Clear or
   reseed if you want a clean prod start.

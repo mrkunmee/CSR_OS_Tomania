@@ -118,7 +118,9 @@ _Blueprint: §3 (workflow steps 1–2), §4 Lead Management, §6 lead statuses._
 ### 🟡 3.4 Multi-agency tenant isolation (§20) — full isolation, staged
 - ✅ **3.4a Schema foundation** (verified) — `Organization` model + nullable `organizationId` across all 18 tenant tables; migration `..._multitenancy_org` backfills existing rows into a default org ("Tomania Agency" / `org_default`); config unique constraints are now org-scoped composites; seed is org-aware. Non-breaking (nullable) — verified: migration applied, all rows backfilled (3 users / 2 leads / 2 companies / 3 packages, 0 orphans), typecheck green, pushed.
 - ✅ **3.4b Enforce isolation** (verified in browser) — `organizationId` is now **NOT NULL** (migration `..._org_required`); session carries the org (authorize→jwt→session + `next-auth.d.ts`); **every** query, create, and action across the app is org-scoped (leads, dashboard, analytics, learning, interview, qualification + partner engines, audit, admin config/prompts/questions). Verified LIVE: a second org (**Acme**) logs in and sees only its own lead — **zero cross-tenant leak**; new org starts with empty config. Compiler-enforced for writes (required FK), manually scoped for reads. Typecheck green, pushed (`91cb840`).
-- ⬜ **3.4c Org onboarding** ◀ **NEXT** — sign-up flow to create an org + first admin, invite users, and seed an org's default config; org-switcher not needed (one org per user).
+- ✅ **3.4c Org onboarding** (verified) — `/signup` creates an org + first admin and **seeds that org's default config** (shared `src/lib/org-defaults.ts`); `/admin/team` lists org members + adds users (email/role/temp password). Verified: signed up "BrightAds" → landed on empty isolated dashboard with full seeded config (3 pkgs / 13 questions / 1 prompt), added a CSR (isolated to the org). Files: `signup/{page,actions}.tsx`, `admin/team/{page,actions,team-form}.tsx`, `src/lib/org-defaults.ts`.
+
+**→ Phase 3 (learning engine + multi-agency) is COMPLETE.**
 
 ## Phase 4 — SaaS
 - ⬜ Self-serve onboarding, billing/metering, plan gating · ⬜ deploy maturity (Docker/CI/CD/monitoring/backups, §21) · ⬜ NDPR/compliance review
@@ -128,7 +130,8 @@ _Blueprint: §3 (workflow steps 1–2), §4 Lead Management, §6 lead statuses._
 ## Current position
 **Phase 1 complete (1.1–1.8). Phase 2: 2.1 prompts + 2.2 config CRUD + 2.2b questions editor + 2.3 analytics + 2.5 call assistant + 2.6 security done.** Only **2.4 async pipeline** remains (deferred — needs Upstash Redis).
 **Deploy: ✅ LIVE & GREEN** at `https://csr-os-tomania.vercel.app` (verified — admin login → dashboard with real data). Fixes that got it green: `trustHost: true` (code), `AUTH_SECRET` set in Vercel, and `DATABASE_URL` = Supabase **Session pooler** :5432 (the direct `db.<ref>` host is IPv6-only → unreachable from Vercel — that was the login failure). `authorize` now logs DB errors server-side. GitHub `mrkunmee/CSR_OS_Tomania`. **TODO:** rotate the DB password + Gemini key (shared in chat during setup).
-**▶ Phase 3 COMPLETE:** learning engine (3.1–3.3) + multi-agency isolation (3.4a schema + 3.4b enforcement, verified with a 2nd org). **Remaining across the whole project:** 3.4c org onboarding (buildable now) · 2.4 async pipeline (needs Upstash Redis) · Phase 4 SaaS: billing/self-serve/Docker/monitoring/NDPR (need external services + decisions).
+**▶ PHASES 1–3 COMPLETE.** Learning engine (3.1–3.3) + multi-agency (3.4a schema + 3.4b isolation + 3.4c onboarding, verified with 3 orgs). **Only remaining work needs external resources/decisions:** 2.4 async pipeline (needs **Upstash Redis**) · Phase 4 SaaS — billing (**Stripe** + pricing), monitoring (**Sentry** DSN), Docker (optional), NDPR review (legal). Backups already handled by Supabase; CI/CD via Vercel.
+**⚠️ Before real production use:** rotate DB password + Gemini key; remove test orgs (Acme, BrightAds) created during 3.4 verification.
 **`GEMINI_API_KEY`** is a rate-limited free-tier key — use a billing-enabled key in prod.
 
 > **Dev-env note:** Turbopack cold compiles are very slow here (60–90s per first route hit). Functionality is unaffected; just expect lag on first navigation to a new route.

@@ -3,6 +3,8 @@
 // Role → User → Company → Lead → Call → Response → Score → Recommendation
 // → PartnerReferral → Package → Task → AuditLog → LearningEvent
 // Config-first tables (Blueprint §12) live at the bottom.
+// Multi-agency tenant isolation (Blueprint Phase 3, §20): every tenant row
+// carries organizationId (Milestone 3.4).
 
 generator client {
   provider = "prisma-client"
@@ -11,6 +13,36 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Tenant (agency) — Blueprint §20 multi-agency
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  users            User[]
+  companies        Company[]
+  leads            Lead[]
+  calls            Call[]
+  responses        Response[]
+  scores           Score[]
+  recommendations  Recommendation[]
+  partnerReferrals PartnerReferral[]
+  tasks            Task[]
+  auditLogs        AuditLog[]
+  learningEvents   LearningEvent[]
+  packages         Package[]
+  partnerServices  PartnerService[]
+  scoringWeights   ScoringWeight[]
+  thresholds       QualificationThreshold[]
+  questions        QualificationQuestion[]
+  promptTemplates  PromptTemplate[]
+  cadences         FollowUpCadence[]
 }
 
 // ---------------------------------------------------------------------------
@@ -31,6 +63,9 @@ model User {
   role         Role     @default(CSR)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
 
   assignedLeads   Lead[]           @relation("CSRAssignment")
   calls           Call[]
@@ -77,6 +112,9 @@ model Company {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+
   leads Lead[]
 }
 
@@ -91,6 +129,9 @@ model Lead {
   estimatedValue  Int?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
 
   company   Company? @relation(fields: [companyId], references: [id])
   companyId String?
@@ -118,6 +159,9 @@ model Call {
   endedAt   DateTime?
   notes     String?
 
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+
   responses Response[]
   scores    Score[]
 }
@@ -133,6 +177,9 @@ model Response {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+
   @@unique([callId, questionKey])
 }
 
@@ -146,6 +193,9 @@ model Score {
   leadScore       Int // 0-100
   confidenceScore Int // 0-100
   createdAt       DateTime @default(now())
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
 }
 
 // AI recommendation with full explainability payload (Blueprint §8, §10)
@@ -184,6 +234,9 @@ model Recommendation {
   overriddenAt   DateTime?
 
   createdAt DateTime @default(now())
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
 }
 
 // Partner/service referral (Blueprint §7)
@@ -195,6 +248,9 @@ model PartnerReferral {
   partnerServiceId String
   reason           String // gap that triggered this (NAFDAC, logistics, branding, website, creatives)
   createdAt        DateTime       @default(now())
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
 }
 
 // Follow-up tasks (Blueprint §8 follow-up, §12 cadence)
@@ -212,6 +268,9 @@ model Task {
   dueAt     DateTime?
   status    TaskStatus @default(OPEN)
   createdAt DateTime   @default(now())
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
 }
 
 // Event audit log (Blueprint §13)
@@ -234,6 +293,9 @@ model AuditLog {
   summary   String
   metadata  Json?
   createdAt DateTime    @default(now())
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
 }
 
 // Continuous learning (Blueprint §11) — deferred to Phase 3, modeled now
@@ -256,15 +318,18 @@ model LearningEvent {
   reviewerId       String?
   reviewedAt       DateTime?
   createdAt        DateTime              @default(now())
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
 }
 
 // ---------------------------------------------------------------------------
-// Config-first tables (Blueprint §12) — admin-editable, no code changes
+// Config-first tables (Blueprint §12) — admin-editable, per-organization
 // ---------------------------------------------------------------------------
 
 model Package {
   id          String  @id @default(cuid())
-  name        String  @unique
+  name        String
   description String?
   priceMin    Int?
   priceMax    Int?
@@ -272,7 +337,12 @@ model Package {
   features    Json?
   active      Boolean @default(true)
 
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+
   recommendations Recommendation[]
+
+  @@unique([organizationId, name])
 }
 
 enum PartnerType {
@@ -290,33 +360,51 @@ model PartnerService {
   description String?
   active      Boolean     @default(true)
 
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+
   referrals PartnerReferral[]
 }
 
 // Configurable scoring weights (Blueprint §12)
 model ScoringWeight {
   id     String  @id @default(cuid())
-  key    String  @unique // "budget", "nafdac", "decisionMaker", ...
+  key    String // "budget", "nafdac", "decisionMaker", ...
   weight Float
   active Boolean @default(true)
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+
+  @@unique([organizationId, key])
 }
 
 // Configurable qualification thresholds
 model QualificationThreshold {
   id    String @id @default(cuid())
-  key   String @unique // "qualifiedMinScore", ...
+  key   String // "qualifiedMinScore", ...
   value Float
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+
+  @@unique([organizationId, key])
 }
 
 // Dynamic qualification questions + branching (Blueprint §5)
 model QualificationQuestion {
   id          String  @id @default(cuid())
-  key         String  @unique
+  key         String
   text        String
   category    String // businessProfile, revenue, budget, nafdac, logistics, ...
   order       Int
   branchRules Json? // conditions -> next question keys
   active      Boolean @default(true)
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+
+  @@unique([organizationId, key])
 }
 
 // Versioned prompt library (Blueprint §16, §12)
@@ -328,13 +416,21 @@ model PromptTemplate {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  @@unique([name, version])
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+
+  @@unique([organizationId, name, version])
 }
 
 // Follow-up cadence config (Blueprint §12)
 model FollowUpCadence {
   id         String               @id @default(cuid())
-  outcome    QualificationOutcome @unique
+  outcome    QualificationOutcome
   offsetDays Int // days after qualification to schedule first follow-up
   active     Boolean              @default(true)
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+
+  @@unique([organizationId, outcome])
 }

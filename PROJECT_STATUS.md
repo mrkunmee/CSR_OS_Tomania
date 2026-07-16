@@ -124,7 +124,7 @@ _Blueprint: §3 (workflow steps 1–2), §4 Lead Management, §6 lead statuses._
 
 ## Current position
 **Phase 1 complete (1.1–1.8). Phase 2: 2.1 prompts + 2.2 config CRUD + 2.2b questions editor + 2.3 analytics + 2.5 call assistant + 2.6 security done.** Only **2.4 async pipeline** remains (deferred — needs Upstash Redis).
-**Deploy:** code pushed to GitHub (`mrkunmee/CSR_OS_Tomania`) and imported to Vercel. **Vercel showed the Auth.js "server configuration" error → fix: set `AUTH_SECRET` (+ `DATABASE_URL` transaction pooler, `GEMINI_API_KEY`) in Vercel env and redeploy.** Code side hardened with `trustHost: true` (pushed). Awaiting user to set env vars.
+**Deploy: ✅ LIVE & GREEN** at `https://csr-os-tomania.vercel.app` (verified — admin login → dashboard with real data). Fixes that got it green: `trustHost: true` (code), `AUTH_SECRET` set in Vercel, and `DATABASE_URL` = Supabase **Session pooler** :5432 (the direct `db.<ref>` host is IPv6-only → unreachable from Vercel — that was the login failure). `authorize` now logs DB errors server-side. GitHub `mrkunmee/CSR_OS_Tomania`. **TODO:** rotate the DB password + Gemini key (shared in chat during setup).
 **▶ Phase 3 underway:** 3.1 capture + 3.2 review/apply + 3.3 aggregate recalibration done — the §11 learning loop is complete (per-event and aggregate, both manager-approved, both applying to live config). **Next: 3.4 multi-agency tenant isolation** (large — its own mini-phase).
 **`GEMINI_API_KEY`** is a rate-limited free-tier key — use a billing-enabled key in prod.
 

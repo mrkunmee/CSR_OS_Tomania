@@ -90,7 +90,7 @@ export async function computeLearningAggregate(): Promise<LearningAggregate> {
   let netProposal: LearningAggregate["netProposal"] = null;
   const net = byDirection.over_optimistic - byDirection.under_estimated;
   if (Math.abs(net) >= 2) {
-    const th = await prisma.qualificationThreshold.findUnique({ where: { key: "qualifiedMinScore" } });
+    const th = await prisma.qualificationThreshold.findFirst({ where: { key: "qualifiedMinScore" } });
     if (th) {
       const delta = net > 0 ? 5 : -5;
       netProposal = {
@@ -118,7 +118,7 @@ export async function recordLearningEvent(leadId: string, actualOutcome: "WON" |
   const [rec, score, threshold] = await Promise.all([
     prisma.recommendation.findFirst({ where: { leadId }, orderBy: { createdAt: "desc" } }),
     prisma.score.findFirst({ where: { leadId }, orderBy: { createdAt: "desc" } }),
-    prisma.qualificationThreshold.findUnique({ where: { key: "qualifiedMinScore" } }),
+    prisma.qualificationThreshold.findFirst({ where: { key: "qualifiedMinScore" } }),
   ]);
 
   const recal = computeRecalibration(

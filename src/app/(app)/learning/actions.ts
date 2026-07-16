@@ -24,15 +24,15 @@ export async function approveLearningEvent(formData: FormData) {
   const applied: string[] = [];
   for (const s of suggestions) {
     if (s.type === "threshold") {
-      const th = await prisma.qualificationThreshold.findUnique({ where: { key: s.key } });
+      const th = await prisma.qualificationThreshold.findFirst({ where: { key: s.key } });
       if (th) {
-        await prisma.qualificationThreshold.update({ where: { key: s.key }, data: { value: s.to } });
+        await prisma.qualificationThreshold.update({ where: { id: th.id }, data: { value: s.to } });
         applied.push(`${s.key} ${s.from}→${s.to}`);
       }
     } else if (s.type === "weight") {
-      const w = await prisma.scoringWeight.findUnique({ where: { key: s.key } });
+      const w = await prisma.scoringWeight.findFirst({ where: { key: s.key } });
       if (w) {
-        await prisma.scoringWeight.update({ where: { key: s.key }, data: { weight: s.to } });
+        await prisma.scoringWeight.update({ where: { id: w.id }, data: { weight: s.to } });
         applied.push(`${s.key} ${s.from}→${s.to}`);
       }
     }
@@ -63,9 +63,9 @@ export async function applyAggregateRecalibration() {
   const p = agg.netProposal;
   if (!p) return;
 
-  const th = await prisma.qualificationThreshold.findUnique({ where: { key: p.key } });
+  const th = await prisma.qualificationThreshold.findFirst({ where: { key: p.key } });
   if (!th) return;
-  await prisma.qualificationThreshold.update({ where: { key: p.key }, data: { value: p.to } });
+  await prisma.qualificationThreshold.update({ where: { id: th.id }, data: { value: p.to } });
 
   await logAudit({
     action: "MANAGER_OVERRIDE",

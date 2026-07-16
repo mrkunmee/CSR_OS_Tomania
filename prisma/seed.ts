@@ -8,23 +8,31 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   console.log("Seeding AI Sales OS...");
 
+  // --- Organization (tenant, Blueprint §20). Fixed id matches the backfill. ---
+  const org = await prisma.organization.upsert({
+    where: { slug: "tomania" },
+    update: {},
+    create: { id: "org_default", name: "Tomania Agency", slug: "tomania" },
+  });
+  const organizationId = org.id;
+
   // --- Users (one per role, Blueprint §4 RBAC) ---
   const password = await bcrypt.hash("password123", 10);
   const [admin, manager, csr] = await Promise.all([
     prisma.user.upsert({
       where: { email: "admin@agency.test" },
-      update: {},
-      create: { email: "admin@agency.test", name: "Admin", role: "ADMIN", passwordHash: password },
+      update: { organizationId },
+      create: { email: "admin@agency.test", name: "Admin", role: "ADMIN", passwordHash: password, organizationId },
     }),
     prisma.user.upsert({
       where: { email: "manager@agency.test" },
-      update: {},
-      create: { email: "manager@agency.test", name: "Manager", role: "MANAGER", passwordHash: password },
+      update: { organizationId },
+      create: { email: "manager@agency.test", name: "Manager", role: "MANAGER", passwordHash: password, organizationId },
     }),
     prisma.user.upsert({
       where: { email: "csr@agency.test" },
-      update: {},
-      create: { email: "csr@agency.test", name: "CSR One", role: "CSR", passwordHash: password },
+      update: { organizationId },
+      create: { email: "csr@agency.test", name: "CSR One", role: "CSR", passwordHash: password, organizationId },
     }),
   ]);
 
@@ -35,7 +43,11 @@ async function main() {
     { name: "Premium", description: "Full-funnel + branding + logistics", priceMin: 600000, priceMax: 1000000, minBudget: 700000 },
   ];
   for (const p of packages) {
-    await prisma.package.upsert({ where: { name: p.name }, update: p, create: p });
+    await prisma.package.upsert({
+      where: { organizationId_name: { organizationId, name: p.name } },
+      update: p,
+      create: { ...p, organizationId },
+    });
   }
 
   // --- Partner services (Blueprint §7) ---
@@ -47,9 +59,8 @@ async function main() {
     { name: "Creative Studio", type: "CREATIVE" as const, description: "Ad creatives & UGC" },
   ];
   for (const p of partners) {
-    // PartnerService has no unique name; guard by find-or-create
-    const existing = await prisma.partnerService.findFirst({ where: { name: p.name } });
-    if (!existing) await prisma.partnerService.create({ data: p });
+    const existing = await prisma.partnerService.findFirst({ where: { name: p.name, organizationId } });
+    if (!existing) await prisma.partnerService.create({ data: { ...p, organizationId } });
   }
 
   // --- Scoring weights (Blueprint §12) ---
@@ -61,7 +72,11 @@ async function main() {
     { key: "productMarketFit", weight: 0.15 },
   ];
   for (const w of weights) {
-    await prisma.scoringWeight.upsert({ where: { key: w.key }, update: w, create: w });
+    await prisma.scoringWeight.upsert({
+      where: { organizationId_key: { organizationId, key: w.key } },
+      update: w,
+      create: { ...w, organizationId },
+    });
   }
 
   // --- Qualification thresholds ---
@@ -71,7 +86,11 @@ async function main() {
     { key: "nurtureMinScore", value: 30 },
   ];
   for (const t of thresholds) {
-    await prisma.qualificationThreshold.upsert({ where: { key: t.key }, update: t, create: t });
+    await prisma.qualificationThreshold.upsert({
+      where: { organizationId_key: { organizationId, key: t.key } },
+      update: t,
+      create: { ...t, organizationId },
+    });
   }
 
   // --- Dynamic qualification questions (Blueprint §5) ---
@@ -98,9 +117,9 @@ async function main() {
   ];
   for (const q of questions) {
     await prisma.qualificationQuestion.upsert({
-      where: { key: q.key },
+      where: { organizationId_key: { organizationId, key: q.key } },
       update: q,
-      create: q,
+      create: { ...q, organizationId },
     });
   }
 
@@ -113,14 +132,19 @@ async function main() {
     { outcome: "DISQUALIFIED_WITH_ROADMAP" as const, offsetDays: 30 },
   ];
   for (const c of cadences) {
-    await prisma.followUpCadence.upsert({ where: { outcome: c.outcome }, update: c, create: c });
+    await prisma.followUpCadence.upsert({
+      where: { organizationId_outcome: { organizationId, outcome: c.outcome } },
+      update: c,
+      create: { ...c, organizationId },
+    });
   }
 
   // --- Starter prompt template (Blueprint §16) ---
   await prisma.promptTemplate.upsert({
-    where: { name_version: { name: "qualification", version: 1 } },
+    where: { organizationId_name_version: { organizationId, name: "qualification", version: 1 } },
     update: {},
     create: {
+      organizationId,
       name: "qualification",
       version: 1,
       body: [
@@ -133,32 +157,37 @@ async function main() {
     },
   });
 
-  // --- Demo company + lead assigned to the CSR ---
-  const company = await prisma.company.create({
-    data: {
-      name: "GreenHerb Naturals",
-      industry: "Herbal supplements",
-      products: "Immune booster, detox tea",
-      nafdacStatus: "PENDING",
-      monthlyRevenue: 2500000,
-      marketingBudget: 400000,
-      salesChannels: "Instagram, WhatsApp",
-      website: "",
-    },
-  });
-  await prisma.lead.create({
-    data: {
-      status: "ASSIGNED",
-      source: "Instagram DM",
-      contactName: "Ada Obi",
-      contactPhone: "+2348000000000",
-      isDecisionMaker: true,
-      companyId: company.id,
-      assignedToId: csr.id,
-    },
-  });
+  // --- Demo company + lead assigned to the CSR (only if none exist yet) ---
+  const existingLead = await prisma.lead.findFirst({ where: { organizationId } });
+  if (!existingLead) {
+    const company = await prisma.company.create({
+      data: {
+        organizationId,
+        name: "GreenHerb Naturals",
+        industry: "Herbal supplements",
+        products: "Immune booster, detox tea",
+        nafdacStatus: "PENDING",
+        monthlyRevenue: 2500000,
+        marketingBudget: 400000,
+        salesChannels: "Instagram, WhatsApp",
+        website: "",
+      },
+    });
+    await prisma.lead.create({
+      data: {
+        organizationId,
+        status: "ASSIGNED",
+        source: "Instagram DM",
+        contactName: "Ada Obi",
+        contactPhone: "+2348000000000",
+        isDecisionMaker: true,
+        companyId: company.id,
+        assignedToId: csr.id,
+      },
+    });
+  }
 
-  console.log(`Seeded users: ${[admin.email, manager.email, csr.email].join(", ")}`);
+  console.log(`Seeded org ${org.slug}; users: ${[admin.email, manager.email, csr.email].join(", ")}`);
   console.log("Done.");
 }
 
